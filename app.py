@@ -10,12 +10,13 @@ from llama_index.core import VectorStoreIndex, SimpleDirectoryReader
 from llama_index.core.node_parser import MarkdownNodeParser
 import streamlit as st
 from dotenv import load_dotenv
-import requests  # Add this if it's not already imported
-import json  # Add this if it's not already imported
+import requests
+import json
+
+# Load environment variables
+load_dotenv()
 
 # Function to interact with the company's LLM API
-
-
 def interact_with_llm(prompt):
     """
     Sends a prompt to the company's LLM API and returns the response.
@@ -48,7 +49,7 @@ def interact_with_llm(prompt):
             "sec-fetch-dest": "empty",
             "sec-fetch-mode": "cors",
             "sec-fetch-site": "cross-site",
-            "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
+            "user-agent": "MyApp/1.0 (https://example.com)"
         }
 
         # Send a POST request to the API
@@ -63,35 +64,35 @@ def interact_with_llm(prompt):
 
     return llm_response
 
-
-load_dotenv()
-
-# Add all your imports here (as shown earlier)
-
-# Add the interact_with_llm function here (as shown above)
-
-load_dotenv()
-
+# Streamlit session setup
 if "id" not in st.session_state:
     st.session_state.id = uuid.uuid4()
     st.session_state.file_cache = {}
 
 session_id = st.session_state.id
-client = None
 
 def reset_chat():
+    """Resets the chat history and session context."""
     st.session_state.messages = []
     st.session_state.context = None
     gc.collect()
 
-def process_with_gitingets(github_url):
-    # or from URL
+def process_with_gitingest(github_url):
+    """
+    Processes a GitHub repository using the gitingest library.
+
+    Args:
+        github_url (str): The GitHub repository URL.
+
+    Returns:
+        tuple: Summary, tree, and content of the repository.
+    """
     summary, tree, content = ingest(github_url)
     return summary, tree, content
 
-
+# Sidebar for GitHub repository input
 with st.sidebar:
-    st.header(f"Add your GitHub repository!")
+    st.header("Add your GitHub repository!")
     
     github_url = st.text_input("Enter GitHub repository URL", placeholder="GitHub URL")
     load_repo = st.button("Load Repository")
@@ -104,8 +105,9 @@ with st.sidebar:
                 file_key = f"{session_id}-{repo_name}"
                 
                 if file_key not in st.session_state.get('file_cache', {}):
-                    # Your repository processing logic here
-                    st.session_state.file_cache[file_key] = True  # Placeholder for query engine
+                    # Repository processing logic
+                    summary, tree, content = process_with_gitingest(github_url)
+                    st.session_state.file_cache[file_key] = {"summary": summary, "tree": tree, "content": content}
                 else:
                     st.write("Repository already loaded.")
 
@@ -114,10 +116,11 @@ with st.sidebar:
             st.error(f"An error occurred: {e}")
             st.stop()     
 
+# Main chat interface
 col1, col2 = st.columns([6, 1])
 
 with col1:
-    st.header(f"Chat with GitHub using RAG </>")
+    st.header("Chat with GitHub using RAG </>")
 
 with col2:
     st.button("Clear ↺", on_click=reset_chat)
@@ -126,32 +129,29 @@ with col2:
 if "messages" not in st.session_state:
     reset_chat()
 
-# Display chat messages from history on app rerun
+# Display chat messages from history
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
 
-# Accept user input
+# User input and assistant response
 if prompt := st.chat_input("What's up?"):
-    # Add user message to chat history
     st.session_state.messages.append({"role": "user", "content": prompt})
-    # Display user message in chat message container
+
     with st.chat_message("user"):
         st.markdown(prompt)
 
-    # Display assistant response in chat message container
     with st.chat_message("assistant"):
         message_placeholder = st.empty()
         full_response = ""
 
         try:
-            # Use the interact_with_llm function to process the prompt
             full_response = interact_with_llm(prompt)
             message_placeholder.markdown(full_response)
         except Exception as e:
-            st.error(f"An error occurred while processing your query: {str(e)}")
             full_response = "Sorry, I encountered an error while processing your request."
+            st.error(f"Error: {e}")
             message_placeholder.markdown(full_response)
 
-    # Add assistant response to chat history
     st.session_state.messages.append({"role": "assistant", "content": full_response})
+
