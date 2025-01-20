@@ -18,9 +18,7 @@ import openai
 load_dotenv()
 
 # Set OpenAI API key
-openai.api_key = os.getenv('OPENAI_API_KEY')
-
-if "id" not in st.session_state:
+openai_api_key = os.getenv("OPENAI_API_KEY")
     st.session_state.id = uuid.uuid4()
     st.session_state.file_cache = {}
 
