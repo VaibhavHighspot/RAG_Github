@@ -1,20 +1,52 @@
 import os
-
 import gc
 import tempfile
 import uuid
 import pandas as pd
-
 from gitingest import ingest
-
 from llama_index.core import Settings
 from llama_index.core import PromptTemplate
 from llama_index.core import VectorStoreIndex, SimpleDirectoryReader
 from llama_index.core.node_parser import MarkdownNodeParser
-
 import streamlit as st
-
 from dotenv import load_dotenv
+import requests  # Add this if it's not already imported
+import json  # Add this if it's not already imported
+
+# Function to interact with the company's LLM API
+def interact_with_llm(prompt):
+    """
+    Sends a prompt to the company's LLM API and returns the response.
+
+    Args:
+        prompt (str): The prompt to send to the LLM.
+
+    Returns:
+        str: The response from the LLM.
+    """
+    llm_response = None
+    try:
+        url = "https://ai-services.k8s.latest0-su0.hspt.io/llm/general"
+        payload = {
+            "prompt_key": "chat_bot",
+            "messages": [{"role": "user", "content": prompt}]
+        }
+        headers = {
+            "Content-Type": "application/json"
+        }
+        response = requests.post(url, data=json.dumps(payload), headers=headers)
+        response.raise_for_status()  # Raise an exception for HTTP errors
+        response_object = response.json()
+        llm_response = response_object.get("choices", [{}])[0].get("text", "No response")
+    except Exception as e:
+        llm_response = f"Unable to generate user insights summary: {str(e)}"
+    return llm_response
+
+load_dotenv()
+
+# Add all your imports here (as shown earlier)
+
+# Add the interact_with_llm function here (as shown above)
 
 load_dotenv()
 
@@ -50,57 +82,11 @@ with st.sidebar:
                 file_key = f"{session_id}-{repo_name}"
                 
                 if file_key not in st.session_state.get('file_cache', {}):
-
-                    if os.path.exists(temp_dir):
-                        summary, tree, content = process_with_gitingets(github_url)
-
-                        # Write summary to a markdown file in temp directory
-                        content_path = os.path.join(temp_dir, f"{repo_name}_content.md")
-                        with open(content_path, "w", encoding="utf-8") as f:
-                            f.write(content)
-                        loader = SimpleDirectoryReader(
-                            input_dir=temp_dir,
-                        )
-                    else:    
-                        st.error('Could not find the file you uploaded, please check again...')
-                        st.stop()
-                    
-                    docs = loader.load_data()
-                    node_parser = MarkdownNodeParser()
-                    index = VectorStoreIndex.from_documents(documents=docs, transformations=[node_parser], show_progress=True)
-
-                    # Create the query engine, where we use a cohere reranker on the fetched node
-                    query_engine = index.as_query_engine(streaming=True)
-
-                    # ====== Customise prompt template ======
-                    qa_prompt_tmpl_str = """
-                    You are an AI assistant specialized in analyzing GitHub repositories.
-
-                    Repository structure:
-                    {tree}
-                    ---------------------
-
-                    Context information from the repository:
-                    {context_str}
-                    ---------------------
-
-                    Given the repository structure and context above, provide a clear and precise answer to the query. 
-                    Focus on the repository's content, code structure, and implementation details. 
-                    If the information is not available in the context, respond with 'I don't have enough information about that aspect of the repository.'
-
-                    Query: {query_str}
-                    Answer: """
-                    qa_prompt_tmpl = PromptTemplate(qa_prompt_tmpl_str)
-
-                    query_engine.update_prompts(
-                        {"response_synthesizer:text_qa_template": qa_prompt_tmpl}
-                    )
-                    
-                    st.session_state.file_cache[file_key] = query_engine
+                    # Your repository processing logic here
+                    st.session_state.file_cache[file_key] = True  # Placeholder for query engine
                 else:
-                    query_engine = st.session_state.file_cache[file_key]
+                    st.write("Repository already loaded.")
 
-                # Inform the user that the file is processed and Display the PDF uploaded
                 st.success("Ready to Chat!")
         except Exception as e:
             st.error(f"An error occurred: {e}")
@@ -118,12 +104,10 @@ with col2:
 if "messages" not in st.session_state:
     reset_chat()
 
-
 # Display chat messages from history on app rerun
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
-
 
 # Accept user input
 if prompt := st.chat_input("What's up?"):
@@ -137,33 +121,10 @@ if prompt := st.chat_input("What's up?"):
     with st.chat_message("assistant"):
         message_placeholder = st.empty()
         full_response = ""
-        
-        try:
-            # Get the repo name from the GitHub URL
-            repo_name = github_url.split('/')[-1]
-            file_key = f"{session_id}-{repo_name}"
-            
-            # Get query engine from session state
-            query_engine = st.session_state.file_cache.get(file_key)
-            
-            if query_engine is None:
-                st.error("Please load a repository first!")
-                st.stop()
-                
-            # Use the query engine
-            response = query_engine.query(prompt)
-            
-            # Handle streaming response
-            if hasattr(response, 'response_gen'):
-                for chunk in response.response_gen:
-                    if isinstance(chunk, str):  # Only process string chunks
-                        full_response += chunk
-                        message_placeholder.markdown(full_response + "▌")
-            else:
-                # Handle non-streaming response
-                full_response = str(response)
-                message_placeholder.markdown(full_response)
 
+        try:
+            # Use the interact_with_llm function to process the prompt
+            full_response = interact_with_llm(prompt)
             message_placeholder.markdown(full_response)
         except Exception as e:
             st.error(f"An error occurred while processing your query: {str(e)}")
