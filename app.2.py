@@ -10,7 +10,7 @@ import streamlit as st
 def initialize_llm():
     return ChatGroq(
          temperature=0.1,
-         groq_api_key='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',
+         groq_api_key=
          model_name="llama-3.1-70b-versatile"
     )
 # Embed repository content
